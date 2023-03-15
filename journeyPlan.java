@@ -2,21 +2,25 @@ import java.sql.*;
 import java.util.StringTokenizer;
 import java.io.IOException;
 import java.io.File;
+import java.io.FileWriter;
 import java.util.Properties;
 import java.util.Scanner;
 import java.text.ParseException;
 
-public class admin {
-    // ------------ Main----------------------
+public class journeyPlan {
     public static void main(String[] args) throws IOException, ParseException {
 
-        String inputfile = "./trains.txt";
+        String inputfile = "./station.txt";
+        String outputfile = "./plan.txt";
         File queries = new File(inputfile);
+        FileWriter filewriter = new FileWriter(outputfile);
         Scanner queryScanner = new Scanner(queries);
         String query = "";
+        Array responseArray;
         String responseQuery = "";
-        int train_num, AC_coaches, Sleeper_coaches;
-        String DOJ = "";
+        int error = 0;
+        String source = "";
+        String destination = "";
         String url = "jdbc:postgresql://localhost:5432/ticket_booking";
         Properties props = new Properties();
         props.setProperty("user", "postgres");
@@ -28,26 +32,25 @@ public class admin {
                 if (query.charAt(0) == '#')
                     break;
                 StringTokenizer tokenizer = new StringTokenizer(query);
-                train_num = Integer.parseInt(tokenizer.nextToken());
-                DOJ = tokenizer.nextToken();
-                java.sql.Date date = java.sql.Date.valueOf(DOJ);
-                AC_coaches = Integer.parseInt(tokenizer.nextToken());
-                Sleeper_coaches = Integer.parseInt(tokenizer.nextToken());
-
+                source = tokenizer.nextToken();
+                destination = tokenizer.nextToken();
                 do {
-                    try (PreparedStatement stmt = conn.prepareStatement("INSERT INTO train_release VALUES (?,?,?,?)")) {
-                        stmt.setInt(1, train_num);
-                        stmt.setInt(2, AC_coaches);
-                        stmt.setInt(3, Sleeper_coaches);
-                        stmt.setDate(4, date);
-                        stmt.executeUpdate();
+                    error=0;
+                    try (CallableStatement cstmt = conn.prepareCall("{? = call check_ifPossible(?,?) }")) {
+                        cstmt.registerOutParameter(1, Types.ARRAY);
+                        cstmt.setString(2, source);
+                        cstmt.setString(3, destination);
+                        cstmt.execute();
+                        responseArray = cstmt.getArray(1);
+                        responseQuery = responseArray.toString();
+                        filewriter.write(responseQuery+"\n");
                         // System.out.println("Inserted successfully");
                     } catch (SQLException e) {
                         // System.out.println("Couldn't connect to database");
                         System.out.println(e);
-                        responseQuery = "Error occurred";
+                        error = 1;
                     }
-                } while (responseQuery == "Error occurred");
+                } while (error == 1);
             }
             System.out.println("Connected successfully");
         } catch (SQLException e) {
@@ -55,5 +58,6 @@ public class admin {
             System.out.println(e);
         }
         queryScanner.close();
+        filewriter.close();
     }
 }

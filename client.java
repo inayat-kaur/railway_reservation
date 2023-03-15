@@ -1,14 +1,18 @@
+//Inayat Kaur - 2020csb1088
+//Kushal Aggrawal - 2020csb1096
+//Ruchika Sharma - 2020csb1119
+
 import java.util.concurrent.ExecutorService ;
 import java.util.concurrent.Executors   ;
 import java.util.concurrent.TimeUnit;
 import java.io.IOException  ;
-
+ 
 public class client
 {
     public static void main(String args[])throws IOException
     {
         /**************************/
-        int firstLevelThreads = 3 ;   // Indicate no of users 
+        int firstLevelThreads = 5 ;   // Indicate no of users 
         /**************************/
         // Creating a thread pool
         ExecutorService executorService = Executors.newFixedThreadPool(firstLevelThreads);

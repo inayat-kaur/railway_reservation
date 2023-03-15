@@ -1,0 +1,265 @@
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+create table Ticket(PNR text primary key, Passenger_name text [], Date_of_journey date, Train_num int, Coach_num int[], Coach_type varchar(20), Berth_num int[], vBerth_type text[]);
+create table Train_release(Train_num int, AC_coaches int, Sleeper_coaches int, Date_of_journey date);
+create table Availability(Train_num int, Date_of_journey date, AC_berths int,Sleeper_berths int);
+create table AC_composition(Berth_num int, Berth_type text);
+create table Sleeper_composition(Berth_num int, Berth_type text);
+
+INSERT INTO AC_composition VALUES(1, 'LB');
+INSERT INTO AC_composition VALUES(2, 'LB');
+INSERT INTO AC_composition VALUES(3, 'UB');
+INSERT INTO AC_composition VALUES(4, 'UB');
+INSERT INTO AC_composition VALUES(5, 'SL');
+INSERT INTO AC_composition VALUES(6, 'SU');
+INSERT INTO AC_composition VALUES(7, 'LB');
+INSERT INTO AC_composition VALUES(8, 'LB');
+INSERT INTO AC_composition VALUES(9, 'UB');
+INSERT INTO AC_composition VALUES(10, 'UB');
+INSERT INTO AC_composition VALUES(11, 'SL');
+INSERT INTO AC_composition VALUES(12, 'SU');
+INSERT INTO AC_composition VALUES(13, 'LB');
+INSERT INTO AC_composition VALUES(14, 'LB');
+INSERT INTO AC_composition VALUES(15, 'UB');
+INSERT INTO AC_composition VALUES(16, 'UB');
+INSERT INTO AC_composition VALUES(17, 'SL');
+INSERT INTO AC_composition VALUES(18, 'SU');
+INSERT INTO Sleeper_composition VALUES(1,'LB');
+INSERT INTO Sleeper_composition VALUES(2,'MB');
+INSERT INTO Sleeper_composition VALUES(3,'UB');
+INSERT INTO Sleeper_composition VALUES(4,'LB');
+INSERT INTO Sleeper_composition VALUES(5,'MB');
+INSERT INTO Sleeper_composition VALUES(6,'UB');
+INSERT INTO Sleeper_composition VALUES(7,'SL');
+INSERT INTO Sleeper_composition VALUES(8,'SU');
+INSERT INTO Sleeper_composition VALUES(9,'LB');
+INSERT INTO Sleeper_composition VALUES(10,'MB');
+INSERT INTO Sleeper_composition VALUES(11,'UB');
+INSERT INTO Sleeper_composition VALUES(12,'LB');
+INSERT INTO Sleeper_composition VALUES(13,'MB');
+INSERT INTO Sleeper_composition VALUES(14,'UB');
+INSERT INTO Sleeper_composition VALUES(15,'SL');
+INSERT INTO Sleeper_composition VALUES(16,'SU');
+INSERT INTO Sleeper_composition VALUES(17,'LB');
+INSERT INTO Sleeper_composition VALUES(18,'MB');
+INSERT INTO Sleeper_composition VALUES(19,'UB');
+INSERT INTO Sleeper_composition VALUES(20,'LB');
+INSERT INTO Sleeper_composition VALUES(21,'MB');
+INSERT INTO Sleeper_composition VALUES(22,'UB');
+INSERT INTO Sleeper_composition VALUES(23,'SL');
+INSERT INTO Sleeper_composition VALUES(24,'SU');
+
+
+CREATE OR REPLACE FUNCTION book_ticket(
+IN pass_count INTEGER,
+IN names_list TEXT[],
+IN train_no INTEGER,
+IN doj_text TEXT,
+IN coach_choice TEXT
+)
+RETURNS TEXT AS $$
+DECLARE
+    i INTEGER DEFAULT 1;
+    doj DATE;
+    flag INTEGER DEFAULT 0;
+    result TEXT DEFAULT '';
+    available INTEGER;
+    id TEXT;
+	present TIMESTAMP(6);
+    t1 INTEGER;
+    t2 INTEGER;
+    t3 TEXT DEFAULT '';
+    coach_no INTEGER[];
+    berth_no INTEGER[];
+    b_type TEXT[];
+BEGIN
+    doj = (SELECT TO_DATE(doj_text,'YYYY-MM-DD'));
+    flag = (SELECT count(*) FROM Train_release T
+    WHERE T.Train_num = train_no and T.Date_of_journey = doj);
+    IF flag = 0 THEN
+        result = result || 'Train not available.';
+        RETURN result;
+    END IF;
+ 
+ 
+    IF coach_choice = 'AC' THEN
+        available =(SELECT A.AC_berths FROM Availability A WHERE A.Train_num = train_no and A.Date_of_journey = doj FOR UPDATE);
+    ELSE
+        available =(SELECT A.Sleeper_berths   FROM Availability A WHERE A.Train_num = train_no and A.Date_of_journey = doj FOR UPDATE);
+    END IF;
+   
+    IF pass_count > available THEN
+        result = result || 'Seats not available.';
+        RETURN result;
+    END IF;
+ 
+    id = ''; 
+    present = (SELECT now()); 
+    id = id || present;
+ 
+    result = result || id || ', ' || pass_count ;
+   
+    IF coach_choice = 'AC' THEN
+        UPDATE Availability SET AC_berths = AC_berths - pass_count
+        WHERE Train_num = train_no and Date_of_journey = doj;
+    ELSE
+        UPDATE Availability SET Sleeper_berths = Sleeper_berths - pass_count
+        WHERE Train_num = train_no and Date_of_journey = doj;
+    END IF;
+   
+ 
+    LOOP
+        EXIT WHEN i > pass_count;
+        IF (coach_choice = 'AC') THEN
+            IF available%18 = 0 THEN
+                t1 = available/18;
+                t2 =18;
+            ELSE
+                t1 = available/18 + 1;
+                t2 =available%18;
+            END IF;
+            t3  = (SELECT Berth_type FROM AC_composition WHERE Berth_num = t2);
+        ELSE
+            IF available%24 = 0 THEN
+                t1 = available/24;
+                t2 =24;
+            ELSE
+                t1 = available/24 + 1;
+                t2 =available%24;
+            END IF;
+            t3  = (SELECT Berth_type FROM Sleeper_composition WHERE Berth_num = t2);
+        END IF;
+        available = available - 1;
+        coach_no[i] = t1;
+        berth_no[i] = t2;
+        b_type[i] = t3;
+        result = result || ', ' || names_list[i] || ' ' || coach_no[i] || ' ' || berth_no[i] || ' ' || b_type[i] ;
+        i := i + 1;
+   
+    END LOOP;
+ 
+    INSERT INTO Ticket VALUES(id, names_list, doj, train_no, coach_no, coach_choice, berth_no, b_type);    
+    RETURN result;
+ 
+ 
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+
+
+CREATE OR REPLACE FUNCTION check_date_validity()
+RETURNS TRIGGER AS $check_date_validity$
+    DECLARE
+        flag INTEGER DEFAULT 0;
+        present_date DATE DEFAULT CURRENT_DATE;
+    BEGIN
+        IF present_date > NEW.Date_of_journey THEN
+            RAISE EXCEPTION  'Date entered not valid';
+        END IF;
+        flag = (SELECT count(*) FROM Train_release T
+        WHERE T.Train_num = NEW.Train_num and T.Date_of_journey = NEW.Date_of_journey);
+        IF flag > 0 THEN
+            RAISE EXCEPTION 'Train already exists on that date.';
+        END IF;
+        RETURN NEW;
+    END;
+$check_date_validity$ LANGUAGE plpgsql;
+ 
+ 
+ 
+CREATE OR REPLACE FUNCTION insert_availability()
+RETURNS TRIGGER AS $insert_availability$
+ 
+    DECLARE
+        AC_b INTEGER;
+        SL_b INTEGER;
+    BEGIN
+        AC_b = 18*new.AC_coaches;
+        SL_b = 24*new.Sleeper_coaches;
+        INSERT INTO Availability(Train_num, Date_of_journey, AC_berths,Sleeper_berths)    
+        VALUES (new.Train_num, new.Date_of_journey, AC_b ,SL_b);
+        RETURN NEW;
+    END;
+$insert_availability$ LANGUAGE plpgsql;
+ 
+ 
+CREATE TRIGGER before_train_addition
+    BEFORE INSERT ON Train_release
+    FOR EACH ROW
+    EXECUTE PROCEDURE check_date_validity();
+ 
+ 
+ 
+CREATE TRIGGER after_train_addition
+    AFTER INSERT ON Train_release
+    FOR EACH ROW
+    EXECUTE PROCEDURE insert_availability();
+
+
+
+**************************************************Part2***********************************************
+
+Create table Stations (Station TEXT, train_num INTEGER, arrival_date DATE, arrival_time TIME, dept_date DATE, dept_time TIME);
+
+
+CREATE OR REPLACE FUNCTION check_ifPossible(
+IN station1 TEXT,
+IN station2 TEXT
+)
+RETURNS TEXT[] AS $$
+DECLARE
+    cur1 REFCURSOR;
+    cur2 REFCURSOR;
+    i INTEGER DEFAULT 0;
+    row_traverse1 RECORD;
+    row_traverse2 RECORD;
+    result TEXT[];
+	message TEXT;
+BEGIN
+    OPEN cur1 FOR (SELECT T1.Station as a1, T1.train_num as a2, T1.arrival_date as a3, T1.arrival_time as a4, T1.dept_date as a5, T1.dept_time as a6, T2.Station as a7, T2.train_num as a8, T2.arrival_date as a9, T2.arrival_time as a10, T2.dept_date as a11, T2.dept_time as a12
+    FROM (SELECT * FROM Stations as S1 WHERE S1.Station = station1) as T1,(SELECT * FROM Stations as S2 WHERE S2.Station = station2) as T2
+    WHERE T1.train_num = T2.train_num and ((T1.dept_date < T2.arrival_date) or (T1.dept_date = T2.arrival_date and T1.dept_time < T2.arrival_time)));
+    LOOP
+        FETCH cur1 INTO row_traverse1;
+        EXIT WHEN NOT FOUND;
+        i = i + 1;
+	  result[i] = '';
+        result[i] = result[i] || row_traverse1.a2 || ' ' || row_traverse1.a1 || ' ' || row_traverse1.a5|| ' ' ||
+row_traverse1.a6 || ' ' || row_traverse1.a7 || ' ' || row_traverse1.a9 || ' ' || row_traverse1.a10;
+    END LOOP;
+    CLOSE cur1;
+ 
+    OPEN cur2 FOR (SELECT T1.Station a1, T1.train_num a2, T1.arrival_date a3, T1.arrival_time a4, T1.dept_date a5, T1.dept_time a6, T2.Station a7, T2.train_num a8, T2.arrival_date a9, T2.arrival_time a10, T2.dept_date a11, T2.dept_time a12, T3.Station a13, T3.train_num a14, T3.arrival_date a15, T3.arrival_time a16, T3.dept_date a17, T3.dept_time a18, T4.Station a19, T4.train_num a20, T4.arrival_date a21, T4.arrival_time a22, T4.dept_date a23, T4.dept_time a24
+FROM (SELECT * FROM Stations as S1 WHERE S1.Station = station1) as T1,(SELECT * FROM Stations) as T2,(SELECT * FROM Stations) as T3,(SELECT * FROM Stations as S2 WHERE S2.Station = station2) as T4
+    WHERE (T1.train_num = T2.train_num and ((T1.dept_date < T2.arrival_date) or (T1.dept_date = T2.arrival_date and T1.dept_time < T2.arrival_time))) and (T2.train_num <> T3.train_num and T2.Station = T3.Station and ((T2.arrival_date < T3.dept_date) or (T2.arrival_date = T3.dept_date and T2.arrival_time < T3.dept_time))) and (T3.train_num = T4.train_num and ((T3.dept_date < T4.arrival_date) or (T3.dept_date = T4.arrival_date and T3.dept_time < T4.arrival_time))));
+    LOOP
+        FETCH cur2 INTO row_traverse2;
+        EXIT WHEN NOT FOUND;
+        i = i + 1;
+	  result[i] = '';
+        result[i] = result[i] || row_traverse2.a2 || ' ' ||
+row_traverse2.a1 || ' ' ||
+row_traverse2.a5|| ' ' ||
+row_traverse2.a6 || ' ' ||
+row_traverse2.a7 || ' ' ||
+row_traverse2.a9|| ' ' ||
+row_traverse2.a10 || ', ' ||
+row_traverse2.a14 || ' ' ||
+row_traverse2.a13 || ' ' ||
+row_traverse2.a17|| ' ' ||
+row_traverse2.a18 || ' ' ||
+row_traverse2.a19 || ' ' ||
+row_traverse2.a21|| ' ' ||
+row_traverse2.a22;
+    END LOOP;
+    CLOSE cur2;
+ 
+    IF i = 0 THEN
+        result[1] = 'journey plan is not possible.';
+    END IF;
+   
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;

@@ -1,11 +1,11 @@
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
+ 
 public class invokeWorkers implements Runnable
 {
     /*************************/
-     int secondLevelThreads = 3;
+     int secondLevelThreads = 30;
     /**************************/
     public invokeWorkers()            // Constructor to get arguments from the main thread
     {

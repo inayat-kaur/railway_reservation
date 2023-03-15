@@ -6,21 +6,20 @@ import java.util.Properties;
 import java.util.Scanner;
 import java.text.ParseException;
 
-public class admin {
-    // ------------ Main----------------------
+public class insertStation {
     public static void main(String[] args) throws IOException, ParseException {
 
-        String inputfile = "./trains.txt";
+        String inputfile = "./station_list.txt";
         File queries = new File(inputfile);
         Scanner queryScanner = new Scanner(queries);
         String query = "";
-        String responseQuery = "";
-        int train_num, AC_coaches, Sleeper_coaches;
-        String DOJ = "";
+        String responseQuery = "";              
+        String station = "";
+        int train_num;
         String url = "jdbc:postgresql://localhost:5432/ticket_booking";
         Properties props = new Properties();
         props.setProperty("user", "postgres");
-        props.setProperty("password", "******");
+        props.setProperty("password", "*******");
         props.setProperty("ssl", "false");
         try (Connection conn = DriverManager.getConnection(url, props);) {
             while (queryScanner.hasNextLine()) {
@@ -28,18 +27,21 @@ public class admin {
                 if (query.charAt(0) == '#')
                     break;
                 StringTokenizer tokenizer = new StringTokenizer(query);
+                station = tokenizer.nextToken();
                 train_num = Integer.parseInt(tokenizer.nextToken());
-                DOJ = tokenizer.nextToken();
-                java.sql.Date date = java.sql.Date.valueOf(DOJ);
-                AC_coaches = Integer.parseInt(tokenizer.nextToken());
-                Sleeper_coaches = Integer.parseInt(tokenizer.nextToken());
+                java.sql.Date arrival_date = java.sql.Date.valueOf(tokenizer.nextToken());
+                java.sql.Time arrival_time = java.sql.Time.valueOf(tokenizer.nextToken());
+                java.sql.Date depart_date = java.sql.Date.valueOf(tokenizer.nextToken());
+                java.sql.Time depart_time = java.sql.Time.valueOf(tokenizer.nextToken());
 
                 do {
-                    try (PreparedStatement stmt = conn.prepareStatement("INSERT INTO train_release VALUES (?,?,?,?)")) {
-                        stmt.setInt(1, train_num);
-                        stmt.setInt(2, AC_coaches);
-                        stmt.setInt(3, Sleeper_coaches);
-                        stmt.setDate(4, date);
+                    try (PreparedStatement stmt = conn.prepareStatement("INSERT INTO Stations VALUES (?,?,?,?,?,?)")) {
+                        stmt.setString(1, station);
+                        stmt.setInt(2, train_num);
+                        stmt.setDate(3, arrival_date);
+                        stmt.setTime(4, arrival_time);
+                        stmt.setDate(5, depart_date);
+                        stmt.setTime(6, depart_time);
                         stmt.executeUpdate();
                         // System.out.println("Inserted successfully");
                     } catch (SQLException e) {

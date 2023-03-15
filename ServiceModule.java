@@ -1,3 +1,7 @@
+//Inayat Kaur - 2020csb1088
+//Kushal Aggrawal - 2020csb1096
+//Ruchika Sharma - 2020csb1119
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.InputStreamReader;
@@ -15,9 +19,11 @@ import java.util.StringTokenizer;
 class QueryRunner implements Runnable {
     // Declare socket for client access
     protected Socket socketConnection;
+    protected Connection conn;
 
-    public QueryRunner(Socket clientSocket) {
+    public QueryRunner(Socket clientSocket, Connection connec) {
         this.socketConnection = clientSocket;
+        this.conn = connec;
     }
 
     public void run() {
@@ -37,13 +43,6 @@ class QueryRunner implements Runnable {
             // Read client query from the socket endpoint
             clientCommand = bufferedInput.readLine();
 
-            String url = "jdbc:postgresql://localhost:5432/ticket_booking";
-            Properties props = new Properties();
-            props.setProperty("user", "postgres");
-            props.setProperty("password", "avneet2004");
-            props.setProperty("ssl", "false");
-            // props.setProperty("ssl", "true");
-
             while (!clientCommand.equals("#")) {
 
                 System.out.println("Recieved data <" + clientCommand + "> from client : "
@@ -56,35 +55,29 @@ class QueryRunner implements Runnable {
                 String[] passengers = new String[no_of_passengers];
                 for (int i = 0; i < no_of_passengers; i++) {
                     passengers[i] = tokenizer.nextToken();
-                    if(i!=no_of_passengers-1)passengers[i] = passengers[i].substring(0,passengers[i].length()-1);
+                    if (i != no_of_passengers - 1)
+                        passengers[i] = passengers[i].substring(0, passengers[i].length() - 1);
                 }
                 int train_num = Integer.parseInt(tokenizer.nextToken());
                 String DOJ = tokenizer.nextToken();
                 String Class = tokenizer.nextToken();
-                // String booking = "SELECT book_ticket(?,?,?,?,?)";
 
-                    do{
-                try (Connection conn = DriverManager.getConnection(url, props);
-                        CallableStatement cstmt = conn.prepareCall("{? = call book_ticket( ?,?,?,?,? ) }")) {
-                    cstmt.registerOutParameter(1, Types.VARCHAR);
-                    cstmt.setInt(2, no_of_passengers);
-                    cstmt.setObject(3, passengers);
-                    cstmt.setInt(4, train_num);
-                    cstmt.setString(5, DOJ);
-                    cstmt.setString(6, Class);
-                    cstmt.execute();
-                    responseQuery = cstmt.getString(1);
-                    // System.out.println("Connected successfully");
-                } catch (SQLException e) {
-                    // System.out.println("Couldn't connect to database");
-                    System.out.println(e);
-                    responseQuery = "Error occurred";
-                }
-            }while(responseQuery=="Error occurred");
+                do {
+                    try (CallableStatement cstmt = conn.prepareCall("{? = call book_ticket( ?,?,?,?,? ) }")) {
+                        cstmt.registerOutParameter(1, Types.VARCHAR);
+                        cstmt.setInt(2, no_of_passengers);
+                        cstmt.setObject(3, passengers);
+                        cstmt.setInt(4, train_num);
+                        cstmt.setString(5, DOJ);
+                        cstmt.setString(6, Class);
+                        cstmt.execute();
+                        responseQuery = cstmt.getString(1);
+                    } catch (SQLException e) {
+                        System.out.println(e);
+                        responseQuery = "Error occurred";
+                    }
+                } while (responseQuery == "Error occurred");
 
-                //System.out.println(responseQuery + "end");
-                // Dummy response send to client
-                // responseQuery = "******* Dummy result ******";
                 // Sending data back to the client
                 printWriter.println(responseQuery);
                 // Read next client query
@@ -109,7 +102,7 @@ public class ServiceModule {
     // Server listens to port
     static int serverPort = 7008;
     // Max no of parallel requests the server can process
-    static int numServerCores = 5;
+    static int numServerCores = 8;
 
     // ------------ Main----------------------
     public static void main(String[] args) throws IOException {
@@ -120,18 +113,28 @@ public class ServiceModule {
                 ServerSocket serverSocket = new ServerSocket(serverPort)) {
             Socket socketConnection = null;
 
-            // Always-ON server
-            while (true) {
-                System.out.println("Listening port : " + serverPort
-                        + "\nWaiting for clients...");
-                socketConnection = serverSocket.accept(); // Accept a connection from a client
-                System.out.println("Accepted client :"
-                        + socketConnection.getRemoteSocketAddress().toString()
-                        + "\n");
-                // Create a runnable task
-                Runnable runnableTask = new QueryRunner(socketConnection);
-                // Submit task for execution
-                executorService.submit(runnableTask);
+            String url = "jdbc:postgresql://localhost:5432/ticket_booking";
+            Properties props = new Properties();
+            props.setProperty("user", "postgres");
+            props.setProperty("password", "*******");
+            props.setProperty("ssl", "false");
+
+            try (Connection conn = DriverManager.getConnection(url, props);) {
+                // Always-ON server
+                while (true) {
+                    System.out.println("Listening port : " + serverPort
+                            + "\nWaiting for clients...");
+                    socketConnection = serverSocket.accept(); // Accept a connection from a client
+                    System.out.println("Accepted client :"
+                            + socketConnection.getRemoteSocketAddress().toString()
+                            + "\n");
+                    // Create a runnable task
+                    Runnable runnableTask = new QueryRunner(socketConnection, conn);
+                    // Submit task for execution
+                    executorService.submit(runnableTask);
+                }
+            } catch (SQLException e) {
+                System.out.println(e);
             }
         }
     }
